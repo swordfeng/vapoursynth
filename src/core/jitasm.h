@@ -31,7 +31,7 @@
 #ifndef JITASM_H
 #define JITASM_H
 
-#if defined(_WIN32)
+#if defined(_WIN32) && !defined(__WINE__)
 #define JITASM_WIN		// Windows
 #endif
 

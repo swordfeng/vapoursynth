@@ -194,7 +194,7 @@ template <class Endian,
           typename std::enable_if<!std::is_same<Endian, native_endian_t>::value>::type * = nullptr>
 uint16_t endian_swap(uint16_t x)
 {
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__WINE__)
 	return _byteswap_ushort(x);
 #else
 	return __builtin_bswap16(x);
@@ -205,7 +205,7 @@ template <class Endian,
           typename std::enable_if<!std::is_same<Endian, native_endian_t>::value>::type * = nullptr>
 uint32_t endian_swap(uint32_t x)
 {
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__WINE__)
 	return _byteswap_ulong(x);
 #else
 	return __builtin_bswap32(x);
@@ -216,7 +216,7 @@ template <class Endian,
           typename std::enable_if<!std::is_same<Endian, native_endian_t>::value>::type * = nullptr>
 uint64_t endian_swap(uint64_t x)
 {
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__WINE__)
 	return _byteswap_uint64(x);
 #else
 	return __builtin_bswap64(x);
