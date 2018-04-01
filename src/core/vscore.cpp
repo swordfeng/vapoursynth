@@ -1363,20 +1363,19 @@ VSPlugin::VSPlugin(const std::string &relFilename, const std::string &forcedName
 #else
     VSInitPlugin pluginInit;
 #ifdef __WINE__
-    std::wstring wPath = utf16_from_utf8(relFilename);
-    size_t len = wPath.size();
-    if (wPath.substr(len - 4, len) == L".dll") {
-        std::vector<wchar_t> fullPathBuffer(32767 + 1); // add 1 since msdn sucks at mentioning whether or not it includes the final null
-        if (wPath.substr(0, 4) != L"\\\\?\\")
-            wPath = L"\\\\?\\" + wPath;
-        GetFullPathNameW(wPath.c_str(), static_cast<DWORD>(fullPathBuffer.size()), fullPathBuffer.data(), nullptr);
-        wPath = fullPathBuffer.data();
-        if (wPath.substr(0, 4) == L"\\\\?\\")
-            wPath = wPath.substr(4);
-        filename = utf16_to_utf8(wPath);
-        for (auto &iter : filename)
-            if (iter == '\\')
-                iter = '/';
+    size_t len = relFilename.size();
+    std::string ext;
+    if (len > 4) ext = relFilename.substr(len - 4, len);
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+    if (ext == ".dll") {
+        // handle path just like linux
+        std::vector<char> fullPathBuffer(PATH_MAX + 1);
+        if (realpath(relFilename.c_str(), fullPathBuffer.data()))
+            filename = fullPathBuffer.data();
+        else
+            filename = relFilename;
+        // load library just like windows
+        std::wstring wPath = utf16_from_utf8(relFilename);
 
         HMODULE handle = LoadLibraryExW(wPath.c_str(), nullptr, altSearchPath ? 0 : (LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR));
         libHandle = (void *)((uintptr_t)handle | 0x1ULL);
