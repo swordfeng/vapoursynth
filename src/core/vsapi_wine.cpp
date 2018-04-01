@@ -27,8 +27,6 @@
 #include <cstring>
 #include <string>
 
-static inline const VSAPIWINE *getAPIWine();
-
 void VS_WINE_CC vs_wine_configPlugin(const char *identifier, const char *defaultNamespace, const char *name, int apiVersion, int readOnly, VSPlugin *plugin) VS_NOEXCEPT {
     assert(identifier && defaultNamespace && name && plugin);
     plugin->configPlugin(identifier, defaultNamespace, name, apiVersion, !!readOnly);
