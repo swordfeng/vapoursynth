@@ -18,6 +18,9 @@
 * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 */
 
+//#ifdef __WINE__
+//#define VS_WINE_CC_OVERRIDE
+
 #include "vscore.h"
 #include "cpufeatures.h"
 #include "vslog.h"
@@ -25,60 +28,62 @@
 #include <cstring>
 #include <string>
 
-void VS_CC vs_internal_configPlugin(const char *identifier, const char *defaultNamespace, const char *name, int apiVersion, int readOnly, VSPlugin *plugin) VS_NOEXCEPT {
+static inline const VSAPIWINE *getAPIWine();
+
+void VS_WINE_CC vs_wine_configPlugin(const char *identifier, const char *defaultNamespace, const char *name, int apiVersion, int readOnly, VSPlugin *plugin) VS_NOEXCEPT {
     assert(identifier && defaultNamespace && name && plugin);
     plugin->configPlugin(identifier, defaultNamespace, name, apiVersion, !!readOnly);
 }
 
-void VS_CC vs_internal_registerFunction(const char *name, const char *args, VSPublicFunction argsFunc, void *functionData, VSPlugin *plugin) VS_NOEXCEPT {
+void VS_WINE_CC vs_wine_registerFunction(const char *name, const char *args, VSPublicFunctionWine argsFunc, void *functionData, VSPlugin *plugin) VS_NOEXCEPT {
     assert(name && args && argsFunc && plugin);
-    plugin->registerFunction(name, args, argsFunc, functionData);
+    plugin->registerFunction(name, args, (VSPublicFunction)SET_WINE_FLAG(argsFunc), functionData);
 }
 
-static const VSFormat *VS_CC getFormatPreset(int id, VSCore *core) VS_NOEXCEPT {
+static const VSFormat *VS_WINE_CC getFormatPreset(int id, VSCore *core) VS_NOEXCEPT {
     assert(core);
     return core->getFormatPreset((VSPresetFormat)id);
 }
 
-static const VSFormat *VS_CC registerFormat(int colorFamily, int sampleType, int bitsPerSample, int subSamplingW, int subSamplingH, VSCore *core) VS_NOEXCEPT {
+static const VSFormat *VS_WINE_CC registerFormat(int colorFamily, int sampleType, int bitsPerSample, int subSamplingW, int subSamplingH, VSCore *core) VS_NOEXCEPT {
     assert(core);
     return core->registerFormat((VSColorFamily)colorFamily, (VSSampleType)sampleType, bitsPerSample, subSamplingW, subSamplingH);
 }
 
-static const VSFrameRef *VS_CC cloneFrameRef(const VSFrameRef *frame) VS_NOEXCEPT {
+static const VSFrameRef *VS_WINE_CC cloneFrameRef(const VSFrameRef *frame) VS_NOEXCEPT {
     assert(frame);
     return new VSFrameRef(frame->frame);
 }
 
-static VSNodeRef *VS_CC cloneNodeRef(VSNodeRef *node) VS_NOEXCEPT {
+static VSNodeRef *VS_WINE_CC cloneNodeRef(VSNodeRef *node) VS_NOEXCEPT {
     assert(node);
     return new VSNodeRef(node->clip, node->index);
 }
 
-static int VS_CC getStride(const VSFrameRef *frame, int plane) VS_NOEXCEPT {
+static int VS_WINE_CC getStride(const VSFrameRef *frame, int plane) VS_NOEXCEPT {
     assert(frame);
     return frame->frame->getStride(plane);
 }
 
-static const uint8_t *VS_CC getReadPtr(const VSFrameRef *frame, int plane) VS_NOEXCEPT {
+static const uint8_t *VS_WINE_CC getReadPtr(const VSFrameRef *frame, int plane) VS_NOEXCEPT {
     assert(frame);
     return frame->frame->getReadPtr(plane);
 }
 
-static uint8_t *VS_CC getWritePtr(VSFrameRef *frame, int plane) VS_NOEXCEPT {
+static uint8_t *VS_WINE_CC getWritePtr(VSFrameRef *frame, int plane) VS_NOEXCEPT {
     assert(frame);
     return frame->frame->getWritePtr(plane);
 }
 
-static void VS_CC getFrameAsync(int n, VSNodeRef *clip, VSFrameDoneCallback fdc, void *userData) VS_NOEXCEPT {
+static void VS_WINE_CC getFrameAsync(int n, VSNodeRef *clip, VSFrameDoneCallbackWine fdc, void *userData) VS_NOEXCEPT {
     assert(clip && fdc);
     int numFrames = clip->clip->getVideoInfo(clip->index).numFrames;
     if (n < 0 || (numFrames && n >= numFrames)) {
-        PFrameContext ctx(std::make_shared<FrameContext>(n, clip->index, clip, fdc, userData));
+        PFrameContext ctx(std::make_shared<FrameContext>(n, clip->index, clip, (VSFrameDoneCallback)SET_WINE_FLAG(fdc), userData));
         ctx->setError("Invalid frame number " + std::to_string(n) + " requested, clip only has " + std::to_string(numFrames) + " frames");
         clip->clip->getFrame(ctx);
     } else {
-        clip->clip->getFrame(std::make_shared<FrameContext>(n, clip->index, clip, fdc, userData));
+        clip->clip->getFrame(std::make_shared<FrameContext>(n, clip->index, clip, (VSFrameDoneCallback)SET_WINE_FLAG(fdc), userData));
     }
 }
 
@@ -105,7 +110,7 @@ static void VS_CC frameWaiterCallback(void *userData, const VSFrameRef *frame, i
     g->a.notify_one();
 }
 
-static const VSFrameRef *VS_CC getFrame(int n, VSNodeRef *clip, char *errorMsg, int bufSize) VS_NOEXCEPT {
+static const VSFrameRef *VS_WINE_CC getFrame(int n, VSNodeRef *clip, char *errorMsg, int bufSize) VS_NOEXCEPT {
     assert(clip);
     GetFrameWaiter g(errorMsg, bufSize);
     std::unique_lock<std::mutex> l(g.b);
@@ -120,7 +125,7 @@ static const VSFrameRef *VS_CC getFrame(int n, VSNodeRef *clip, char *errorMsg, 
     return g.r;
 }
 
-static void VS_CC requestFrameFilter(int n, VSNodeRef *clip, VSFrameContext *frameCtx) VS_NOEXCEPT {
+static void VS_WINE_CC requestFrameFilter(int n, VSNodeRef *clip, VSFrameContext *frameCtx) VS_NOEXCEPT {
     assert(clip && frameCtx);
     int numFrames = clip->clip->getVideoInfo(clip->index).numFrames;
     if (numFrames && n >= numFrames)
@@ -128,7 +133,7 @@ static void VS_CC requestFrameFilter(int n, VSNodeRef *clip, VSFrameContext *fra
     frameCtx->reqList.push_back(std::make_shared<FrameContext>(n, clip->index, clip->clip.get(), frameCtx->ctx));
 }
 
-static const VSFrameRef *VS_CC getFrameFilter(int n, VSNodeRef *clip, VSFrameContext *frameCtx) VS_NOEXCEPT {
+static const VSFrameRef *VS_WINE_CC getFrameFilter(int n, VSNodeRef *clip, VSFrameContext *frameCtx) VS_NOEXCEPT {
     assert(clip && frameCtx);
 
     int numFrames = clip->clip->getVideoInfo(clip->index).numFrames;
@@ -140,20 +145,20 @@ static const VSFrameRef *VS_CC getFrameFilter(int n, VSNodeRef *clip, VSFrameCon
     return nullptr;
 }
 
-static void VS_CC freeFrame(const VSFrameRef *frame) VS_NOEXCEPT {
+static void VS_WINE_CC freeFrame(const VSFrameRef *frame) VS_NOEXCEPT {
     delete frame;
 }
 
-static void VS_CC freeNode(VSNodeRef *clip) VS_NOEXCEPT {
+static void VS_WINE_CC freeNode(VSNodeRef *clip) VS_NOEXCEPT {
     delete clip;
 }
 
-static VSFrameRef *VS_CC newVideoFrame(const VSFormat *format, int width, int height, const VSFrameRef *propSrc, VSCore *core) VS_NOEXCEPT {
+static VSFrameRef *VS_WINE_CC newVideoFrame(const VSFormat *format, int width, int height, const VSFrameRef *propSrc, VSCore *core) VS_NOEXCEPT {
     assert(format && core);
     return new VSFrameRef(core->newVideoFrame(format, width, height, propSrc ? propSrc->frame.get() : nullptr));
 }
 
-static VSFrameRef *VS_CC newVideoFrame2(const VSFormat *format, int width, int height, const VSFrameRef **planeSrc, const int *planes, const VSFrameRef *propSrc, VSCore *core) VS_NOEXCEPT {
+static VSFrameRef *VS_WINE_CC newVideoFrame2(const VSFormat *format, int width, int height, const VSFrameRef **planeSrc, const int *planes, const VSFrameRef *propSrc, VSCore *core) VS_NOEXCEPT {
     assert(format && core);
     VSFrame *fp[3];
     for (int i = 0; i < format->numPlanes; i++)
@@ -161,29 +166,32 @@ static VSFrameRef *VS_CC newVideoFrame2(const VSFormat *format, int width, int h
     return new VSFrameRef(core->newVideoFrame(format, width, height, fp, planes, propSrc ? propSrc->frame.get() : nullptr));
 }
 
-static VSFrameRef *VS_CC copyFrame(const VSFrameRef *frame, VSCore *core) VS_NOEXCEPT {
+static VSFrameRef *VS_WINE_CC copyFrame(const VSFrameRef *frame, VSCore *core) VS_NOEXCEPT {
     assert(frame && core);
     return new VSFrameRef(core->copyFrame(frame->frame));
 }
 
-static void VS_CC copyFrameProps(const VSFrameRef *src, VSFrameRef *dst, VSCore *core) VS_NOEXCEPT {
+static void VS_WINE_CC copyFrameProps(const VSFrameRef *src, VSFrameRef *dst, VSCore *core) VS_NOEXCEPT {
     assert(src && dst && core);
     core->copyFrameProps(src->frame, dst->frame);
 }
 
-static void VS_CC createFilter(const VSMap *in, VSMap *out, const char *name, VSFilterInit init, VSFilterGetFrame getFrame, VSFilterFree free, int filterMode, int flags, void *instanceData, VSCore *core) VS_NOEXCEPT {
+
+
+static void VS_WINE_CC createFilter(const VSMap *in, VSMap *out, const char *name, VSFilterInitWine init, VSFilterGetFrameWine getFrame, VSFilterFreeWine free, int filterMode, int flags, void *instanceData, VSCore *core) VS_NOEXCEPT {
     assert(in && out && name && init && getFrame && core);
     if (!name)
         vsFatal("NULL name pointer passed to createFilter()");
-    core->createFilter(in, out, name, init, getFrame, free, static_cast<VSFilterMode>(filterMode), flags, instanceData, VAPOURSYNTH_API_MAJOR);
+    core->createFilter(in, out, name, (VSFilterInit)SET_WINE_FLAG(init), (VSFilterGetFrame)SET_WINE_FLAG(getFrame), (VSFilterFree)SET_WINE_FLAG(free),
+            static_cast<VSFilterMode>(filterMode), flags, instanceData, VAPOURSYNTH_API_MAJOR);
 }
 
-static void VS_CC setError(VSMap *map, const char *errorMessage) VS_NOEXCEPT {
+static void VS_WINE_CC setError(VSMap *map, const char *errorMessage) VS_NOEXCEPT {
     assert(map && errorMessage);
     map->setError(errorMessage ? errorMessage : "Error: no error specified");
 }
 
-static const char *VS_CC getError(const VSMap *map) VS_NOEXCEPT {
+static const char *VS_WINE_CC getError(const VSMap *map) VS_NOEXCEPT {
     assert(map);
     if (map->hasError())
         return map->getErrorMessage().c_str();
@@ -191,55 +199,55 @@ static const char *VS_CC getError(const VSMap *map) VS_NOEXCEPT {
         return nullptr;
 }
 
-static void VS_CC setFilterError(const char *errorMessage, VSFrameContext *context) VS_NOEXCEPT {
+static void VS_WINE_CC setFilterError(const char *errorMessage, VSFrameContext *context) VS_NOEXCEPT {
     assert(errorMessage && context);
     context->ctx->setError(errorMessage);
 }
 
 //property access functions
-static const VSVideoInfo *VS_CC getVideoInfo(VSNodeRef *c) VS_NOEXCEPT {
+static const VSVideoInfo *VS_WINE_CC getVideoInfo(VSNodeRef *c) VS_NOEXCEPT {
     assert(c);
     return &c->clip->getVideoInfo(c->index);
 }
 
-static void VS_CC setVideoInfo(const VSVideoInfo *vi, int numOutputs, VSNode *c) VS_NOEXCEPT {
+static void VS_WINE_CC setVideoInfo(const VSVideoInfo *vi, int numOutputs, VSNode *c) VS_NOEXCEPT {
     assert(vi && numOutputs > 0 && c);
     c->setVideoInfo(vi, numOutputs);
 }
 
-static const VSFormat *VS_CC getFrameFormat(const VSFrameRef *f) VS_NOEXCEPT {
+static const VSFormat *VS_WINE_CC getFrameFormat(const VSFrameRef *f) VS_NOEXCEPT {
     assert(f);
     return f->frame->getFormat();
 }
 
-static int VS_CC getFrameWidth(const VSFrameRef *f, int plane) VS_NOEXCEPT {
+static int VS_WINE_CC getFrameWidth(const VSFrameRef *f, int plane) VS_NOEXCEPT {
     assert(f);
     assert(plane >= 0);
     return f->frame->getWidth(plane);
 }
 
-static int VS_CC getFrameHeight(const VSFrameRef *f, int plane) VS_NOEXCEPT {
+static int VS_WINE_CC getFrameHeight(const VSFrameRef *f, int plane) VS_NOEXCEPT {
     assert(f);
     assert(plane >= 0);
     return f->frame->getHeight(plane);
 }
 
-static const VSMap *VS_CC getFramePropsRO(const VSFrameRef *frame) VS_NOEXCEPT {
+static const VSMap *VS_WINE_CC getFramePropsRO(const VSFrameRef *frame) VS_NOEXCEPT {
     assert(frame);
     return &frame->frame->getConstProperties();
 }
 
-static VSMap *VS_CC getFramePropsRW(VSFrameRef *frame) VS_NOEXCEPT {
+static VSMap *VS_WINE_CC getFramePropsRW(VSFrameRef *frame) VS_NOEXCEPT {
     assert(frame);
     return &frame->frame->getProperties();
 }
 
-static int VS_CC propNumKeys(const VSMap *map) VS_NOEXCEPT {
+static int VS_WINE_CC propNumKeys(const VSMap *map) VS_NOEXCEPT {
     assert(map);
     return static_cast<int>(map->size());
 }
 
-static const char *VS_CC propGetKey(const VSMap *map, int index) VS_NOEXCEPT {
+static const char *VS_WINE_CC propGetKey(const VSMap *map, int index) VS_NOEXCEPT {
     assert(map);
     if (index < 0 || static_cast<size_t>(index) >= map->size())
         vsFatal(("propGetKey: Out of bounds index " + std::to_string(index) + " passed. Valid range: [0," + std::to_string(map->size() - 1) + "]").c_str());
@@ -253,12 +261,12 @@ static int propNumElementsInternal(const VSMap *map, const std::string &key) VS_
 }
 
 
-static int VS_CC propNumElements(const VSMap *map, const char *key) VS_NOEXCEPT {
+static int VS_WINE_CC propNumElements(const VSMap *map, const char *key) VS_NOEXCEPT {
     assert(map && key);
     return propNumElementsInternal(map, key);
 }
 
-static char VS_CC propGetType(const VSMap *map, const char *key) VS_NOEXCEPT {
+static char VS_WINE_CC propGetType(const VSMap *map, const char *key) VS_NOEXCEPT {
     assert(map && key);
     const char a[] = { 'u', 'i', 'f', 's', 'c', 'v', 'm' };
     VSVariant *val = map->find(key);
@@ -289,31 +297,31 @@ static char VS_CC propGetType(const VSMap *map, const char *key) VS_NOEXCEPT {
     *error = err; \
     return 0;
 
-static int64_t VS_CC propGetInt(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
+static int64_t VS_WINE_CC propGetInt(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
     PROP_GET_SHARED(VSVariant::vInt, l->getValue<int64_t>(index))
 }
 
-static double VS_CC propGetFloat(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
+static double VS_WINE_CC propGetFloat(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
     PROP_GET_SHARED(VSVariant::vFloat, l->getValue<double>(index))
 }
 
-static const char *VS_CC propGetData(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
+static const char *VS_WINE_CC propGetData(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
     PROP_GET_SHARED(VSVariant::vData, l->getValue<VSMapData>(index)->c_str())
 }
 
-static int VS_CC propGetDataSize(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
+static int VS_WINE_CC propGetDataSize(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
     PROP_GET_SHARED(VSVariant::vData, static_cast<int>(l->getValue<VSMapData>(index)->size()))
 }
 
-static VSNodeRef *VS_CC propGetNode(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
+static VSNodeRef *VS_WINE_CC propGetNode(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
     PROP_GET_SHARED(VSVariant::vNode, new VSNodeRef(l->getValue<VSNodeRef>(index)))
 }
 
-static const VSFrameRef *VS_CC propGetFrame(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
+static const VSFrameRef *VS_WINE_CC propGetFrame(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
     PROP_GET_SHARED(VSVariant::vFrame, new VSFrameRef(l->getValue<PVideoFrame>(index)))
 }
 
-static int VS_CC propDeleteKey(VSMap *map, const char *key) VS_NOEXCEPT {
+static int VS_WINE_CC propDeleteKey(VSMap *map, const char *key) VS_NOEXCEPT {
     assert(map && key);
     return map->erase(key);
 }
@@ -361,138 +369,138 @@ static bool isValidVSMapKey(const std::string &s) {
     return 0;
 
 
-static int VS_CC propSetInt(VSMap *map, const char *key, int64_t i, int append) VS_NOEXCEPT {
+static int VS_WINE_CC propSetInt(VSMap *map, const char *key, int64_t i, int append) VS_NOEXCEPT {
     PROP_SET_SHARED(VSVariant::vInt, i)
 }
 
-static int VS_CC propSetFloat(VSMap *map, const char *key, double d, int append) VS_NOEXCEPT {
+static int VS_WINE_CC propSetFloat(VSMap *map, const char *key, double d, int append) VS_NOEXCEPT {
     PROP_SET_SHARED(VSVariant::vFloat, d)
 }
 
-static int VS_CC propSetData(VSMap *map, const char *key, const char *d, int length, int append) VS_NOEXCEPT {
+static int VS_WINE_CC propSetData(VSMap *map, const char *key, const char *d, int length, int append) VS_NOEXCEPT {
     PROP_SET_SHARED(VSVariant::vData, length >= 0 ? std::string(d, length) : std::string(d))
 }
 
-static int VS_CC propSetNode(VSMap *map, const char *key, VSNodeRef *clip, int append) VS_NOEXCEPT {
+static int VS_WINE_CC propSetNode(VSMap *map, const char *key, VSNodeRef *clip, int append) VS_NOEXCEPT {
     PROP_SET_SHARED(VSVariant::vNode, *clip)
 }
 
-static int VS_CC propSetFrame(VSMap *map, const char *key, const VSFrameRef *frame, int append) VS_NOEXCEPT {
+static int VS_WINE_CC propSetFrame(VSMap *map, const char *key, const VSFrameRef *frame, int append) VS_NOEXCEPT {
     PROP_SET_SHARED(VSVariant::vFrame, frame->frame)
 }
 
-static VSMap *VS_CC invoke(VSPlugin *plugin, const char *name, const VSMap *args) VS_NOEXCEPT {
+static VSMap *VS_WINE_CC invoke(VSPlugin *plugin, const char *name, const VSMap *args) VS_NOEXCEPT {
     assert(plugin && name && args);
     return new VSMap(plugin->invoke(name, *args));
 }
 
-static VSMap *VS_CC createMap() VS_NOEXCEPT {
+static VSMap *VS_WINE_CC createMap() VS_NOEXCEPT {
     return new VSMap();
 }
 
-static void VS_CC freeMap(VSMap *map) VS_NOEXCEPT {
+static void VS_WINE_CC freeMap(VSMap *map) VS_NOEXCEPT {
     delete map;
 }
 
-static void VS_CC clearMap(VSMap *map) VS_NOEXCEPT {
+static void VS_WINE_CC clearMap(VSMap *map) VS_NOEXCEPT {
     assert(map);
     map->clear();
 }
 
-static VSCore *VS_CC createCore(int threads) VS_NOEXCEPT {
+static VSCore *VS_WINE_CC createCore(int threads) VS_NOEXCEPT {
     return new VSCore(threads);
 }
 
-static void VS_CC freeCore(VSCore *core) VS_NOEXCEPT {
+static void VS_WINE_CC freeCore(VSCore *core) VS_NOEXCEPT {
     if (core)
         core->freeCore();
 }
 
-static VSPlugin *VS_CC getPluginById(const char *identifier, VSCore *core) VS_NOEXCEPT {
+static VSPlugin *VS_WINE_CC getPluginById(const char *identifier, VSCore *core) VS_NOEXCEPT {
     assert(identifier && core);
     return core->getPluginById(identifier);
 }
 
-static VSPlugin *VS_CC getPluginByNs(const char *ns, VSCore *core) VS_NOEXCEPT {
+static VSPlugin *VS_WINE_CC getPluginByNs(const char *ns, VSCore *core) VS_NOEXCEPT {
     assert(ns && core);
     return core->getPluginByNs(ns);
 }
 
-static VSMap *VS_CC getPlugins(VSCore *core) VS_NOEXCEPT {
+static VSMap *VS_WINE_CC getPlugins(VSCore *core) VS_NOEXCEPT {
     assert(core);
     return new VSMap(core->getPlugins());
 }
 
-static VSMap *VS_CC getFunctions(VSPlugin *plugin) VS_NOEXCEPT {
+static VSMap *VS_WINE_CC getFunctions(VSPlugin *plugin) VS_NOEXCEPT {
     assert(plugin);
     return new VSMap(plugin->getFunctions());
 }
 
-static const VSCoreInfo *VS_CC getCoreInfo(VSCore *core) VS_NOEXCEPT {
+static const VSCoreInfo *VS_WINE_CC getCoreInfo(VSCore *core) VS_NOEXCEPT {
     assert(core);
     return &core->getCoreInfo();
 }
 
-static VSFuncRef *VS_CC propGetFunc(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
+static VSFuncRef *VS_WINE_CC propGetFunc(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT {
     PROP_GET_SHARED(VSVariant::vMethod, new VSFuncRef(l->getValue<PExtFunction>(index)))
 }
 
-static int VS_CC propSetFunc(VSMap *map, const char *key, VSFuncRef *func, int append) VS_NOEXCEPT {
+static int VS_WINE_CC propSetFunc(VSMap *map, const char *key, VSFuncRef *func, int append) VS_NOEXCEPT {
     assert(func);
     PROP_SET_SHARED(VSVariant::vMethod, func->func)
 }
 
-static void VS_CC callFunc(VSFuncRef *func, const VSMap *in, VSMap *out, VSCore *core, const VSAPI *vsapi) VS_NOEXCEPT {
+static void VS_WINE_CC callFunc(VSFuncRef *func, const VSMap *in, VSMap *out, VSCore *core, const VSAPIWINE *vsapi) VS_NOEXCEPT {
     assert(func && in && out);
     func->func->call(in, out);
 }
 
-static VSFuncRef *VS_CC createFunc(VSPublicFunction func, void *userData, VSFreeFuncData free, VSCore *core, const VSAPI *vsapi) VS_NOEXCEPT {
+static VSFuncRef *VS_WINE_CC createFunc(VSPublicFunctionWine func, void *userData, VSFreeFuncDataWine free, VSCore *core, const VSAPIWINE *vsapi) VS_NOEXCEPT {
     assert(func && core && vsapi);
-    return new VSFuncRef(std::make_shared<ExtFunction>(func, userData, free, core, vsapi));
+    return new VSFuncRef(std::make_shared<ExtFunction>((VSPublicFunction)SET_WINE_FLAG(func), userData, (VSFreeFuncData)SET_WINE_FLAG(free), core, &vs_internal_vsapi));
 }
 
-static void VS_CC freeFunc(VSFuncRef *f) VS_NOEXCEPT {
+static void VS_WINE_CC freeFunc(VSFuncRef *f) VS_NOEXCEPT {
     delete f;
 }
 
-static void VS_CC queryCompletedFrame(VSNodeRef **node, int *n, VSFrameContext *frameCtx) VS_NOEXCEPT {
+static void VS_WINE_CC queryCompletedFrame(VSNodeRef **node, int *n, VSFrameContext *frameCtx) VS_NOEXCEPT {
     assert(node && n && frameCtx);
     *node = frameCtx->ctx->lastCompletedNode;
     *n = frameCtx->ctx->lastCompletedN;
 }
 
-static void VS_CC releaseFrameEarly(VSNodeRef *node, int n, VSFrameContext *frameCtx) VS_NOEXCEPT {
+static void VS_WINE_CC releaseFrameEarly(VSNodeRef *node, int n, VSFrameContext *frameCtx) VS_NOEXCEPT {
     assert(node && frameCtx);
     frameCtx->ctx->availableFrames.erase(NodeOutputKey(node->clip.get(), n, node->index));
 }
 
-static VSFuncRef *VS_CC cloneFuncRef(VSFuncRef *f) VS_NOEXCEPT {
+static VSFuncRef *VS_WINE_CC cloneFuncRef(VSFuncRef *f) VS_NOEXCEPT {
     assert(f);
     return new VSFuncRef(f->func);
 }
 
-static int64_t VS_CC setMaxCacheSize(int64_t bytes, VSCore *core) VS_NOEXCEPT {
+static int64_t VS_WINE_CC setMaxCacheSize(int64_t bytes, VSCore *core) VS_NOEXCEPT {
     assert(core);
     return core->memory->setMaxMemoryUse(bytes);
 }
 
-static int VS_CC getOutputIndex(VSFrameContext *frameCtx) VS_NOEXCEPT {
+static int VS_WINE_CC getOutputIndex(VSFrameContext *frameCtx) VS_NOEXCEPT {
     assert(frameCtx);
     return frameCtx->ctx->index;
 }
 
-static void VS_CC setMessageHandler(VSMessageHandler handler, void *userData) VS_NOEXCEPT {
-    vsSetMessageHandler(handler, userData);
+static void VS_WINE_CC setMessageHandler(VSMessageHandlerWine handler, void *userData) VS_NOEXCEPT {
+    vsSetMessageHandler((VSMessageHandler)SET_WINE_FLAG(handler), userData);
 }
 
-static int VS_CC setThreadCount(int threads, VSCore *core) VS_NOEXCEPT {
+static int VS_WINE_CC setThreadCount(int threads, VSCore *core) VS_NOEXCEPT {
     assert(core);
     core->threadPool->setThreadCount(threads);
     return core->threadPool->threadCount();
 }
 
-static const char *VS_CC getPluginPath(const VSPlugin *plugin) VS_NOEXCEPT {
+static const char *VS_WINE_CC getPluginPath(const VSPlugin *plugin) VS_NOEXCEPT {
     if (!plugin)
         vsFatal("NULL passed to getPluginPath");
     if (!plugin->filename.empty())
@@ -501,17 +509,17 @@ static const char *VS_CC getPluginPath(const VSPlugin *plugin) VS_NOEXCEPT {
         return nullptr;
 }
 
-static const int64_t *VS_CC propGetIntArray(const VSMap *map, const char *key, int *error) VS_NOEXCEPT {
+static const int64_t *VS_WINE_CC propGetIntArray(const VSMap *map, const char *key, int *error) VS_NOEXCEPT {
     int index = 0;
     PROP_GET_SHARED(VSVariant::vInt, l->getArray<int64_t>())
 }
 
-static const double *VS_CC propGetFloatArray(const VSMap *map, const char *key, int *error) VS_NOEXCEPT {
+static const double *VS_WINE_CC propGetFloatArray(const VSMap *map, const char *key, int *error) VS_NOEXCEPT {
     int index = 0;
     PROP_GET_SHARED(VSVariant::vFloat, l->getArray<double>())
 }
 
-static int VS_CC propSetIntArray(VSMap *map, const char *key, const int64_t *i, int size) VS_NOEXCEPT {
+static int VS_WINE_CC propSetIntArray(VSMap *map, const char *key, const int64_t *i, int size) VS_NOEXCEPT {
     assert(map && key && size >= 0);
     if (size < 0)
         return 1;
@@ -524,7 +532,7 @@ static int VS_CC propSetIntArray(VSMap *map, const char *key, const int64_t *i, 
     return 0;
 }
 
-static int VS_CC propSetFloatArray(VSMap *map, const char *key, const double *d, int size) VS_NOEXCEPT {
+static int VS_WINE_CC propSetFloatArray(VSMap *map, const char *key, const double *d, int size) VS_NOEXCEPT {
     assert(map && key && size >= 0);
     if (size < 0)
         return 1;
@@ -537,11 +545,11 @@ static int VS_CC propSetFloatArray(VSMap *map, const char *key, const double *d,
     return 0;
 }
 
-static void VS_CC logMessage(int msgType, const char *msg) VS_NOEXCEPT {
+static void VS_WINE_CC logMessage(int msgType, const char *msg) VS_NOEXCEPT {
     vsLog(__FILE__, __LINE__, static_cast<VSMessageType>(msgType), "%s", msg);
 }
 
-const VSAPI vs_internal_vsapi = {
+const VSAPIWINE vs_wine_vsapi = {
     &createCore,
     &freeCore,
     &getCoreInfo,
@@ -557,7 +565,7 @@ const VSAPI vs_internal_vsapi = {
     &newVideoFrame,
     &copyFrame,
     &copyFrameProps,
-    &vs_internal_registerFunction,
+    &vs_wine_registerFunction,
     &getPluginById,
     &getPluginByNs,
     &getPlugins,
@@ -631,32 +639,13 @@ const VSAPI vs_internal_vsapi = {
     &logMessage
 };
 
-///////////////////////////////
-
-const VSAPI *getVSAPIInternal(int apiMajor) {
+const VSAPIWINE *getVSAPIWine(int apiMajor) {
     if (apiMajor == VAPOURSYNTH_API_MAJOR) {
-        return &vs_internal_vsapi;
+        return &vs_wine_vsapi;
     } else {
         vsFatal("Internally requested API version %d not supported", apiMajor);
         return nullptr;
     }
 }
 
-const VSAPI *VS_CC getVapourSynthAPI(int version) VS_NOEXCEPT {
-    int apiMajor = version;
-    int apiMinor = 0;
-    if (apiMajor >= 0x10000) {
-        apiMinor = (apiMajor & 0xFFFF);
-        apiMajor >>= 16;
-    }
-
-    CPUFeatures f;
-    getCPUFeatures(&f);
-    if (!f.can_run_vs) {
-        return nullptr;
-    } else if (apiMajor == VAPOURSYNTH_API_MAJOR && apiMinor <= VAPOURSYNTH_API_MINOR) {
-        return &vs_internal_vsapi;
-    } else {
-        return nullptr;
-    }
-}
+//#endif // __WINE__
