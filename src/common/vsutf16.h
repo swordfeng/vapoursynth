@@ -21,7 +21,6 @@
 #ifndef VSUTF16_H
 #define VSUTF16_H
 
-#ifndef __WINE__
 #include <string>
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -43,21 +42,5 @@ static std::wstring utf16_from_utf8(const std::string &str) {
     MultiByteToWideChar(CP_UTF8, 0, str.c_str(), static_cast<int>(str.size()), &wbuffer[0], required_size);
     return wbuffer;
 }
-
-#else
-#include <locale>
-#include <codecvt>
-#include <string>
-
-static std::string utf16_to_utf8(const std::wstring &wstr) {
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-    return converter.to_bytes(wstr.c_str());
-}
-
-static std::wstring utf16_from_utf8(const std::string &str) {
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-    return converter.from_bytes(str);
-}
-#endif
 
 #endif

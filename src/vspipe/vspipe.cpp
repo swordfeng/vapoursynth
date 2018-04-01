@@ -40,7 +40,7 @@
 #define __STDC_FORMAT_MACROS
 #include <stdio.h>
 #include <inttypes.h>
-
+#include <dlfcn.h>
 
 // Needed so windows doesn't drool on itself when ctrl-c is pressed
 #ifdef VS_TARGET_OS_WINDOWS
@@ -483,6 +483,10 @@ int main(int argc, char **argv) {
     nstring outputFilename, scriptFilename, timecodesFilename;
     bool showHelp = false;
     std::map<std::string, std::string> scriptArgs;
+
+    // load global python
+    puts(PYTHON_SO);
+    dlopen(PYTHON_SO, RTLD_LAZY | RTLD_GLOBAL);
 
     for (int arg = 1; arg < argc; arg++) {
         nstring argString = argv[arg];
