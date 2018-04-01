@@ -358,6 +358,11 @@ void VSThreadPool::returnFrame(const PFrameContext &rCtx, const PVideoFrame &f) 
     VSFrameRef *ref = new VSFrameRef(f);
     if (outputLock)
         callbackLock.lock();
+#ifdef __WINE__
+    if (TEST_WINE_FLAG(rCtx->frameDone))
+        ((VSFrameDoneCallbackWine)CLEAR_WINE_FLAG(rCtx->frameDone))(rCtx->userData, ref, rCtx->n, rCtx->node, nullptr);
+    else
+#endif
     rCtx->frameDone(rCtx->userData, ref, rCtx->n, rCtx->node, nullptr);
     if (outputLock)
         callbackLock.unlock();
@@ -372,6 +377,11 @@ void VSThreadPool::returnFrame(const PFrameContext &rCtx, const std::string &err
     lock.unlock();
     if (outputLock)
         callbackLock.lock();
+#ifdef __WINE__
+    if (TEST_WINE_FLAG(rCtx->frameDone))
+        ((VSFrameDoneCallbackWine)CLEAR_WINE_FLAG(rCtx->frameDone))(rCtx->userData, nullptr, rCtx->n, rCtx->node, errMsg.c_str());
+    else
+#endif
     rCtx->frameDone(rCtx->userData, nullptr, rCtx->n, rCtx->node, errMsg.c_str());
     if (outputLock)
         callbackLock.unlock();

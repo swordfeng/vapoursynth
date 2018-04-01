@@ -46,6 +46,7 @@ add_library (vapoursynth SHARED
     src/core/transpose.c
     src/core/version.h
     src/core/vsapi.cpp
+    src/core/vsapi_wine.cpp
     src/core/vscore.cpp
     src/core/vscore.h
     src/core/vslog.cpp

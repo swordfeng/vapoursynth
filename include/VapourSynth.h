@@ -43,7 +43,18 @@
 #if defined(_WIN32) && !defined(_WIN64) && !defined(__WINE__)
 #    define VS_CC __stdcall
 #else
-#    define VS_CC
+#    ifdef __WINE__
+#        if defined(_WIN32) && !defined(_WIN64)
+#            define VS_WINE_CC __attribute__((stdcall))
+#        else
+#            define VS_WINE_CC __attribute__((ms_abi))
+#        endif
+#    endif
+#    ifndef VS_WINE_CC_OVERRIDE
+#        define VS_CC
+#    else
+#        define VS_CC VS_WINE_CC
+#    endif
 #endif
 
 /* And now for some symbol hide-and-seek... */
@@ -336,6 +347,130 @@ struct VSAPI {
     /* api 3.4 */
     void (VS_CC *logMessage)(int msgType, const char *msg) VS_NOEXCEPT;
 };
+
+#ifdef __WINE__
+
+#define SET_WINE_FLAG(p) ((void *)(p != nullptr ? ((uintptr_t)p | 0x1ULL) : 0))
+#define CLEAR_WINE_FLAG(p) ((void *)((uintptr_t)p & ~0x1ULL))
+#define TEST_WINE_FLAG(p) ((void *)((uintptr_t)p & 0x1ULL))
+
+typedef struct VSAPIWINE VSAPIWINE;
+
+/* core entry point */
+typedef const VSAPIWINE *(VS_WINE_CC *VSGetVapourSynthAPIWine)(int version);
+
+/* plugin function and filter typedefs */
+typedef void (VS_WINE_CC *VSPublicFunctionWine)(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPIWINE *vsapi);
+typedef void (VS_WINE_CC *VSRegisterFunctionWine)(const char *name, const char *args, VSPublicFunctionWine argsFunc, void *functionData, VSPlugin *plugin);
+typedef void (VS_WINE_CC *VSConfigPluginWine)(const char *identifier, const char *defaultNamespace, const char *name, int apiVersion, int readonly, VSPlugin *plugin);
+typedef void (VS_WINE_CC *VSInitPluginWine)(VSConfigPluginWine configFunc, VSRegisterFunctionWine registerFunc, VSPlugin *plugin);
+typedef void (VS_WINE_CC *VSFreeFuncDataWine)(void *userData);
+typedef void (VS_WINE_CC *VSFilterInitWine)(VSMap *in, VSMap *out, void **instanceData, VSNode *node, VSCore *core, const VSAPIWINE *vsapi);
+typedef const VSFrameRef *(VS_WINE_CC *VSFilterGetFrameWine)(int n, int activationReason, void **instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPIWINE *vsapi);
+typedef void (VS_WINE_CC *VSFilterFreeWine)(void *instanceData, VSCore *core, const VSAPIWINE *vsapi);
+
+/* other */
+typedef void (VS_WINE_CC *VSFrameDoneCallbackWine)(void *userData, const VSFrameRef *f, int n, VSNodeRef *, const char *errorMsg);
+typedef void (VS_WINE_CC *VSMessageHandlerWine)(int msgType, const char *msg, void *userData);
+
+struct VSAPIWINE {
+    VSCore *(VS_WINE_CC *createCore)(int threads) VS_NOEXCEPT;
+    void (VS_WINE_CC *freeCore)(VSCore *core) VS_NOEXCEPT;
+    const VSCoreInfo *(VS_WINE_CC *getCoreInfo)(VSCore *core) VS_NOEXCEPT;
+
+    const VSFrameRef *(VS_WINE_CC *cloneFrameRef)(const VSFrameRef *f) VS_NOEXCEPT;
+    VSNodeRef *(VS_WINE_CC *cloneNodeRef)(VSNodeRef *node) VS_NOEXCEPT;
+    VSFuncRef *(VS_WINE_CC *cloneFuncRef)(VSFuncRef *f) VS_NOEXCEPT;
+
+    void (VS_WINE_CC *freeFrame)(const VSFrameRef *f) VS_NOEXCEPT;
+    void (VS_WINE_CC *freeNode)(VSNodeRef *node) VS_NOEXCEPT;
+    void (VS_WINE_CC *freeFunc)(VSFuncRef *f) VS_NOEXCEPT;
+
+    VSFrameRef *(VS_WINE_CC *newVideoFrame)(const VSFormat *format, int width, int height, const VSFrameRef *propSrc, VSCore *core) VS_NOEXCEPT;
+    VSFrameRef *(VS_WINE_CC *copyFrame)(const VSFrameRef *f, VSCore *core) VS_NOEXCEPT;
+    void (VS_WINE_CC *copyFrameProps)(const VSFrameRef *src, VSFrameRef *dst, VSCore *core) VS_NOEXCEPT;
+
+    void (VS_WINE_CC *registerFunction)(const char *name, const char *args, VSPublicFunctionWine argsFunc, void *functionData, VSPlugin *plugin) VS_NOEXCEPT;
+    VSPlugin *(VS_WINE_CC *getPluginById)(const char *identifier, VSCore *core) VS_NOEXCEPT;
+    VSPlugin *(VS_WINE_CC *getPluginByNs)(const char *ns, VSCore *core) VS_NOEXCEPT;
+    VSMap *(VS_WINE_CC *getPlugins)(VSCore *core) VS_NOEXCEPT;
+    VSMap *(VS_WINE_CC *getFunctions)(VSPlugin *plugin) VS_NOEXCEPT;
+    void (VS_WINE_CC *createFilter)(const VSMap *in, VSMap *out, const char *name, VSFilterInitWine init, VSFilterGetFrameWine getFrame, VSFilterFreeWine free, int filterMode, int flags, void *instanceData, VSCore *core) VS_NOEXCEPT;
+    void (VS_WINE_CC *setError)(VSMap *map, const char *errorMessage) VS_NOEXCEPT; /* use to signal errors outside filter getframe functions */
+    const char *(VS_WINE_CC *getError)(const VSMap *map) VS_NOEXCEPT; /* use to query errors, returns 0 if no error */
+    void (VS_WINE_CC *setFilterError)(const char *errorMessage, VSFrameContext *frameCtx) VS_NOEXCEPT; /* use to signal errors in the filter getframe function */
+    VSMap *(VS_WINE_CC *invoke)(VSPlugin *plugin, const char *name, const VSMap *args) VS_NOEXCEPT;
+
+    const VSFormat *(VS_WINE_CC *getFormatPreset)(int id, VSCore *core) VS_NOEXCEPT;
+    const VSFormat *(VS_WINE_CC *registerFormat)(int colorFamily, int sampleType, int bitsPerSample, int subSamplingW, int subSamplingH, VSCore *core) VS_NOEXCEPT;
+
+    const VSFrameRef *(VS_WINE_CC *getFrame)(int n, VSNodeRef *node, char *errorMsg, int bufSize) VS_NOEXCEPT; /* do never use inside a filter's getframe function, for external applications using the core as a library or for requesting frames in a filter constructor */
+    void (VS_WINE_CC *getFrameAsync)(int n, VSNodeRef *node, VSFrameDoneCallbackWine callback, void *userData) VS_NOEXCEPT; /* do never use inside a filter's getframe function, for external applications using the core as a library or for requesting frames in a filter constructor */
+    const VSFrameRef *(VS_WINE_CC *getFrameFilter)(int n, VSNodeRef *node, VSFrameContext *frameCtx) VS_NOEXCEPT; /* only use inside a filter's getframe function */
+    void (VS_WINE_CC *requestFrameFilter)(int n, VSNodeRef *node, VSFrameContext *frameCtx) VS_NOEXCEPT; /* only use inside a filter's getframe function */
+    void (VS_WINE_CC *queryCompletedFrame)(VSNodeRef **node, int *n, VSFrameContext *frameCtx) VS_NOEXCEPT; /* only use inside a filter's getframe function */
+    void (VS_WINE_CC *releaseFrameEarly)(VSNodeRef *node, int n, VSFrameContext *frameCtx) VS_NOEXCEPT; /* only use inside a filter's getframe function */
+
+    int (VS_WINE_CC *getStride)(const VSFrameRef *f, int plane) VS_NOEXCEPT;
+    const uint8_t *(VS_WINE_CC *getReadPtr)(const VSFrameRef *f, int plane) VS_NOEXCEPT;
+    uint8_t *(VS_WINE_CC *getWritePtr)(VSFrameRef *f, int plane) VS_NOEXCEPT;
+
+    VSFuncRef *(VS_WINE_CC *createFunc)(VSPublicFunctionWine func, void *userData, VSFreeFuncDataWine free, VSCore *core, const VSAPIWINE *vsapi) VS_NOEXCEPT;
+    void (VS_WINE_CC *callFunc)(VSFuncRef *func, const VSMap *in, VSMap *out, VSCore *core, const VSAPIWINE *vsapi) VS_NOEXCEPT; /* core and vsapi arguments are completely ignored, they only remain to preserve ABI */
+
+    /* property access functions */
+    VSMap *(VS_WINE_CC *createMap)(void) VS_NOEXCEPT;
+    void (VS_WINE_CC *freeMap)(VSMap *map) VS_NOEXCEPT;
+    void (VS_WINE_CC *clearMap)(VSMap *map) VS_NOEXCEPT;
+
+    const VSVideoInfo *(VS_WINE_CC *getVideoInfo)(VSNodeRef *node) VS_NOEXCEPT;
+    void (VS_WINE_CC *setVideoInfo)(const VSVideoInfo *vi, int numOutputs, VSNode *node) VS_NOEXCEPT;
+    const VSFormat *(VS_WINE_CC *getFrameFormat)(const VSFrameRef *f) VS_NOEXCEPT;
+    int (VS_WINE_CC *getFrameWidth)(const VSFrameRef *f, int plane) VS_NOEXCEPT;
+    int (VS_WINE_CC *getFrameHeight)(const VSFrameRef *f, int plane) VS_NOEXCEPT;
+    const VSMap *(VS_WINE_CC *getFramePropsRO)(const VSFrameRef *f) VS_NOEXCEPT;
+    VSMap *(VS_WINE_CC *getFramePropsRW)(VSFrameRef *f) VS_NOEXCEPT;
+
+    int (VS_WINE_CC *propNumKeys)(const VSMap *map) VS_NOEXCEPT;
+    const char *(VS_WINE_CC *propGetKey)(const VSMap *map, int index) VS_NOEXCEPT;
+    int (VS_WINE_CC *propNumElements)(const VSMap *map, const char *key) VS_NOEXCEPT;
+    char (VS_WINE_CC *propGetType)(const VSMap *map, const char *key) VS_NOEXCEPT;
+
+    int64_t(VS_WINE_CC *propGetInt)(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT;
+    double(VS_WINE_CC *propGetFloat)(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT;
+    const char *(VS_WINE_CC *propGetData)(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT;
+    int (VS_WINE_CC *propGetDataSize)(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT;
+    VSNodeRef *(VS_WINE_CC *propGetNode)(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT;
+    const VSFrameRef *(VS_WINE_CC *propGetFrame)(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT;
+    VSFuncRef *(VS_WINE_CC *propGetFunc)(const VSMap *map, const char *key, int index, int *error) VS_NOEXCEPT;
+
+    int (VS_WINE_CC *propDeleteKey)(VSMap *map, const char *key) VS_NOEXCEPT;
+    int (VS_WINE_CC *propSetInt)(VSMap *map, const char *key, int64_t i, int append) VS_NOEXCEPT;
+    int (VS_WINE_CC *propSetFloat)(VSMap *map, const char *key, double d, int append) VS_NOEXCEPT;
+    int (VS_WINE_CC *propSetData)(VSMap *map, const char *key, const char *data, int size, int append) VS_NOEXCEPT;
+    int (VS_WINE_CC *propSetNode)(VSMap *map, const char *key, VSNodeRef *node, int append) VS_NOEXCEPT;
+    int (VS_WINE_CC *propSetFrame)(VSMap *map, const char *key, const VSFrameRef *f, int append) VS_NOEXCEPT;
+    int (VS_WINE_CC *propSetFunc)(VSMap *map, const char *key, VSFuncRef *func, int append) VS_NOEXCEPT;
+
+    int64_t (VS_WINE_CC *setMaxCacheSize)(int64_t bytes, VSCore *core) VS_NOEXCEPT;
+    int (VS_WINE_CC *getOutputIndex)(VSFrameContext *frameCtx) VS_NOEXCEPT;
+    VSFrameRef *(VS_WINE_CC *newVideoFrame2)(const VSFormat *format, int width, int height, const VSFrameRef **planeSrc, const int *planes, const VSFrameRef *propSrc, VSCore *core) VS_NOEXCEPT;
+    void (VS_WINE_CC *setMessageHandler)(VSMessageHandlerWine handler, void *userData) VS_NOEXCEPT;
+    int (VS_WINE_CC *setThreadCount)(int threads, VSCore *core) VS_NOEXCEPT;
+
+    const char *(VS_WINE_CC *getPluginPath)(const VSPlugin *plugin) VS_NOEXCEPT;
+
+    /* api 3.1 */
+    const int64_t *(VS_WINE_CC *propGetIntArray)(const VSMap *map, const char *key, int *error) VS_NOEXCEPT;
+    const double *(VS_WINE_CC *propGetFloatArray)(const VSMap *map, const char *key, int *error) VS_NOEXCEPT;
+
+    int (VS_WINE_CC *propSetIntArray)(VSMap *map, const char *key, const int64_t *i, int size) VS_NOEXCEPT;
+    int (VS_WINE_CC *propSetFloatArray)(VSMap *map, const char *key, const double *d, int size) VS_NOEXCEPT;
+
+    /* api 3.4 */
+    void (VS_WINE_CC *logMessage)(int msgType, const char *msg) VS_NOEXCEPT;
+};
+#endif
 
 VS_API(const VSAPI *) getVapourSynthAPI(int version) VS_NOEXCEPT;
 
