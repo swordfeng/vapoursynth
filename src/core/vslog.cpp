@@ -53,6 +53,11 @@ void vsLog(const char *file, long line, VSMessageType type, const char *msg, ...
             va_start(alist, msg);
             vsnprintf(buf.data(), buf.size(), msg, alist);
             va_end(alist);
+#ifdef __WINE__
+            if (TEST_WINE_FLAG(messageHandler))
+                ((VSMessageHandlerWine)CLEAR_WINE_FLAG(messageHandler))(type, buf.data(), messageUserData);
+            else
+#endif
             messageHandler(type, buf.data(), messageUserData);
         } catch (std::bad_alloc &) {
             fprintf(stderr, "Bad alloc exception in log handler\n");

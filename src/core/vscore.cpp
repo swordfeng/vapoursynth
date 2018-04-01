@@ -110,12 +110,23 @@ ExtFunction::ExtFunction(VSPublicFunction func, void *userData, VSFreeFuncData f
 }
 
 ExtFunction::~ExtFunction() {
-    if (free)
+    if (free) {
+#ifdef __WINE__
+        if (TEST_WINE_FLAG(free))
+            ((VSFreeFuncDataWine)CLEAR_WINE_FLAG(free))(userData);
+        else
+#endif
         free(userData);
+    }
     core->functionInstanceDestroyed();
 }
 
 void ExtFunction::call(const VSMap *in, VSMap *out) {
+#ifdef __WINE__
+        if (TEST_WINE_FLAG(func))
+            ((VSPublicFunctionWine)CLEAR_WINE_FLAG(func))(in, out, userData, core, &vs_wine_vsapi);
+        else
+#endif
     func(in, out, userData, core, vsapi);
 }
 
@@ -791,6 +802,11 @@ instanceData(instanceData), name(name), init(init), filterGetFrame(getFrame), fr
 
     core->filterInstanceCreated();
     VSMap inval(*in);
+#ifdef __WINE__
+    if (TEST_WINE_FLAG(init))
+        ((VSFilterInitWine)CLEAR_WINE_FLAG(init))(&inval, out, &this->instanceData, this, core, getVSAPIWine(apiMajor));
+    else
+#endif
     init(&inval, out, &this->instanceData, this, core, getVSAPIInternal(apiMajor));
 
     if (out->hasError()) {
@@ -846,7 +862,13 @@ void VSNode::setVideoInfo(const VSVideoInfo *vi, int numOutputs) {
 }
 
 PVideoFrame VSNode::getFrameInternal(int n, int activationReason, VSFrameContext &frameCtx) {
-    const VSFrameRef *r = filterGetFrame(n, activationReason, &instanceData, &frameCtx.ctx->frameContext, &frameCtx, core, &vs_internal_vsapi);
+    const VSFrameRef *r;
+#ifdef __WINE__
+    if (TEST_WINE_FLAG(init))
+        r = ((VSFilterGetFrameWine)CLEAR_WINE_FLAG(filterGetFrame))(n, activationReason, &instanceData, &frameCtx.ctx->frameContext, &frameCtx, core, &vs_wine_vsapi);
+    else
+#endif
+    r = filterGetFrame(n, activationReason, &instanceData, &frameCtx.ctx->frameContext, &frameCtx, core, &vs_internal_vsapi);
 
 #ifdef VS_TARGET_CPU_X86
     if (!vs_isMMXStateOk())
@@ -1046,6 +1068,11 @@ const VSCoreInfo &VSCore::getCoreInfo() {
 
 void VS_CC vs_internal_configPlugin(const char *identifier, const char *defaultNamespace, const char *name, int apiVersion, int readOnly, VSPlugin *plugin);
 void VS_CC vs_internal_registerFunction(const char *name, const char *args, VSPublicFunction argsFunc, void *functionData, VSPlugin *plugin);
+#ifdef __WINE__
+void VS_WINE_CC vs_wine_configPlugin(const char *identifier, const char *defaultNamespace, const char *name, int apiVersion, int readOnly, VSPlugin *plugin);
+void VS_WINE_CC vs_wine_registerFunction(const char *name, const char *args, VSPublicFunctionWine argsFunc, void *functionData, VSPlugin *plugin);
+#endif
+
 
 static void VS_CC loadPlugin(const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi) {
     try {
@@ -1217,6 +1244,11 @@ void VSCore::destroyFilterInstance(VSNode *node) {
         while (nodeFreeList) {
             VSCoreShittyList *current = nodeFreeList;
             nodeFreeList = current->next;
+#ifdef __WINE__
+            if (TEST_WINE_FLAG(current->free))
+                ((VSFilterFreeWine)CLEAR_WINE_FLAG(current->free))(current->instanceData, this, &vs_wine_vsapi);
+            else
+#endif
             current->free(current->instanceData, this, &vs_internal_vsapi);
             delete current;
             filterInstanceDestroyed();
@@ -1582,6 +1614,12 @@ VSPlugin::VSPlugin(const std::string &relFilename, const std::string &forcedName
 #endif // __WINE__
 
 #endif
+
+#ifdef __WINE__
+    if (TEST_WINE_FLAG(libHandle))
+        ((VSInitPluginWine)pluginInit)(::vs_wine_configPlugin, ::vs_wine_registerFunction, this);
+    else
+#endif // __WINE__
     pluginInit(::vs_internal_configPlugin, ::vs_internal_registerFunction, this);
 
 #ifdef VS_TARGET_CPU_X86
@@ -1621,16 +1659,17 @@ VSPlugin::~VSPlugin() {
     if (libHandle)
         FreeLibrary(libHandle);
 #else
-    if (libHandle)
+    if (libHandle) {
 #ifdef __WINE__
         if (TEST_WINE_FLAG(libHandle)) {
-            FreeLibrary((HMODULE)CLEAR_WINE_FLAG(libHandle);
+            FreeLibrary((HMODULE)CLEAR_WINE_FLAG(libHandle));
         } else {
             dlclose(libHandle);
         }
 #else // __WINE__
         dlclose(libHandle);
 #endif // __WINE__
+    }
 #endif
 }
 
@@ -1749,9 +1788,9 @@ VSMap VSPlugin::invoke(const std::string &funcName, const VSMap &args) {
                 throw VSException(funcName + ": no argument(s) named " + s);
             }
 #ifdef __WINE__
-            if (TEST_WINE_FLAG(f.func)) {
-                ((VSPublicFunctionWine)CLEAR_WINE_FLAG(f.func))(&args, &v, f.functionData, core, getVSAPIWine(apiMajor))
-            } else
+            if (TEST_WINE_FLAG(f.func))
+                ((VSPublicFunctionWine)CLEAR_WINE_FLAG(f.func))(&args, &v, f.functionData, core, getVSAPIWine(apiMajor));
+            else
 #endif
             f.func(&args, &v, f.functionData, core, getVSAPIInternal(apiMajor));
 

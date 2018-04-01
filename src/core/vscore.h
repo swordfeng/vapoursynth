@@ -79,6 +79,10 @@ typedef std::shared_ptr<FrameContext> PFrameContext;
 
 extern const VSAPI vs_internal_vsapi;
 const VSAPI *getVSAPIInternal(int apiMajor);
+#ifdef __WINE__
+extern const VSAPIWINE vs_wine_vsapi;
+const VSAPIWINE *getVSAPIWine(int apiMajor);
+#endif
 
 class VSException : public std::runtime_error {
 public:
