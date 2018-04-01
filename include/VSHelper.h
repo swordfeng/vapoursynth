@@ -17,7 +17,7 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__WINE__)
 #include <malloc.h>
 #endif
 #include "VapourSynth.h"
@@ -36,7 +36,7 @@
 #define VS_RESTRICT
 #endif
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__WINE__)
 #define VS_ALIGNED_MALLOC(pptr, size, alignment) do { *(pptr) = _aligned_malloc((size), (alignment)); } while (0)
 #define VS_ALIGNED_FREE(ptr) do { _aligned_free((ptr)); } while (0)
 #else
@@ -55,7 +55,7 @@ template<typename T=void>
 template<typename T>
 #endif
 static inline T* vs_aligned_malloc(size_t size, size_t alignment) {
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__WINE__)
     return (T*)_aligned_malloc(size, alignment);
 #else
     void *tmp = NULL;
