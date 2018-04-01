@@ -485,7 +485,6 @@ int main(int argc, char **argv) {
     std::map<std::string, std::string> scriptArgs;
 
     // load global python
-    puts(PYTHON_SO);
     dlopen(PYTHON_SO, RTLD_LAZY | RTLD_GLOBAL);
 
     for (int arg = 1; arg < argc; arg++) {
