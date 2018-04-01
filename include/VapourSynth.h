@@ -40,14 +40,14 @@
 #    define VS_NOEXCEPT
 #endif
 
-#if defined(_WIN32) && !defined(_WIN64)
+#if defined(_WIN32) && !defined(_WIN64) && !defined(__WINE__)
 #    define VS_CC __stdcall
 #else
 #    define VS_CC
 #endif
 
 /* And now for some symbol hide-and-seek... */
-#if defined(_WIN32) /* Windows being special */
+#if defined(_WIN32) && !defined(__WINE__) /* Windows being special */
 #    define VS_EXTERNAL_API(ret) VS_EXTERN_C __declspec(dllexport) ret VS_CC
 #elif defined(__GNUC__) && __GNUC__ >= 4
 #    define VS_EXTERNAL_API(ret) VS_EXTERN_C __attribute__((visibility("default"))) ret VS_CC
@@ -55,7 +55,7 @@
 #    define VS_EXTERNAL_API(ret) VS_EXTERN_C ret VS_CC
 #endif
 
-#if !defined(VS_CORE_EXPORTS) && defined(_WIN32)
+#if !defined(VS_CORE_EXPORTS) && defined(_WIN32) && !defined(__WINE__)
 #    define VS_API(ret) VS_EXTERN_C __declspec(dllimport) ret VS_CC
 #else
 #    define VS_API(ret) VS_EXTERNAL_API(ret)
