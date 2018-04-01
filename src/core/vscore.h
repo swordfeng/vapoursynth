@@ -47,6 +47,12 @@
 #    include <windows.h>
 #    define VS_FRAME_POOL
 #else
+#    ifdef __WINE__
+#        ifndef NOMINMAX
+#            define NOMINMAX
+#        endif
+#        include <windows.h>
+#    endif
 #    include <dlfcn.h>
 #endif
 

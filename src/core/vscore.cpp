@@ -35,7 +35,7 @@
 #include "x86utils.h"
 #endif
 
-#ifdef VS_TARGET_OS_WINDOWS
+#if defined(VS_TARGET_OS_WINDOWS) || defined(__WINE__)
 #include <shlobj.h>
 #include <locale>
 #include "../common/vsutf16.h"
@@ -1361,6 +1361,47 @@ VSPlugin::VSPlugin(const std::string &relFilename, const std::string &forcedName
         throw VSException("No entry point found in " + relFilename);
     }
 #else
+    VSInitPlugin pluginInit;
+#ifdef __WINE__
+    std::wstring wPath = utf16_from_utf8(relFilename);
+    size_t len = wPath.size();
+    if (wPath.substr(len - 4, len) == L".dll") {
+        std::vector<wchar_t> fullPathBuffer(32767 + 1); // add 1 since msdn sucks at mentioning whether or not it includes the final null
+        if (wPath.substr(0, 4) != L"\\\\?\\")
+            wPath = L"\\\\?\\" + wPath;
+        GetFullPathNameW(wPath.c_str(), static_cast<DWORD>(fullPathBuffer.size()), fullPathBuffer.data(), nullptr);
+        wPath = fullPathBuffer.data();
+        if (wPath.substr(0, 4) == L"\\\\?\\")
+            wPath = wPath.substr(4);
+        filename = utf16_to_utf8(wPath);
+        for (auto &iter : filename)
+            if (iter == '\\')
+                iter = '/';
+
+        HMODULE handle = LoadLibraryExW(wPath.c_str(), nullptr, altSearchPath ? 0 : (LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR));
+        libHandle = (void *)((uintptr_t)handle | 0x1ULL);
+
+        if (!handle) {
+            DWORD lastError = GetLastError();
+
+            if (lastError == 87)
+                throw VSException("LoadLibraryEx failed with code 87: Update windows and try again");
+            if (lastError == 126)
+                throw VSException("Failed to load " + relFilename + ". GetLastError() returned " + std::to_string(lastError) + ". A DLL dependency is probably missing.");
+            throw VSException("Failed to load " + relFilename + ". GetLastError() returned " + std::to_string(lastError) + ".");
+        }
+
+        pluginInit = (VSInitPlugin)GetProcAddress(handle, "VapourSynthPluginInit");
+
+        if (!pluginInit)
+            pluginInit = (VSInitPlugin)GetProcAddress(handle, "_VapourSynthPluginInit@12");
+
+        if (!pluginInit) {
+            FreeLibrary(handle);
+            throw VSException("No entry point found in " + relFilename);
+        }
+    } else {
+#endif //__WINE__
     std::vector<char> fullPathBuffer(PATH_MAX + 1);
     if (realpath(relFilename.c_str(), fullPathBuffer.data()))
         filename = fullPathBuffer.data();
@@ -1377,13 +1418,15 @@ VSPlugin::VSPlugin(const std::string &relFilename, const std::string &forcedName
             throw VSException("Failed to load " + relFilename);
     }
 
-    VSInitPlugin pluginInit = (VSInitPlugin)dlsym(libHandle, "VapourSynthPluginInit");
+    pluginInit = (VSInitPlugin)dlsym(libHandle, "VapourSynthPluginInit");
 
     if (!pluginInit) {
         dlclose(libHandle);
         throw VSException("No entry point found in " + relFilename);
     }
-
+#ifdef __WINE__
+    }
+#endif // __WINE__
 
 #endif
     pluginInit(::vs_internal_configPlugin, ::vs_internal_registerFunction, this);
@@ -1406,7 +1449,15 @@ VSPlugin::VSPlugin(const std::string &relFilename, const std::string &forcedName
 #ifdef VS_TARGET_OS_WINDOWS
         FreeLibrary(libHandle);
 #else
+#ifdef __WINE__
+        if ((uintptr_t)libHandle & 0x1) {
+            FreeLibrary((HMODULE)((uintptr_t)libHandle | ~0x1ULL));
+        } else {
+            dlclose(libHandle);
+        }
+#else // __WINE__
         dlclose(libHandle);
+#endif // __WINE__
 #endif
         throw VSException("Core only supports API R" + std::to_string(VAPOURSYNTH_API_MAJOR) + "." + std::to_string(VAPOURSYNTH_API_MINOR) + " but the loaded plugin requires API R" + std::to_string(apiMajor) + "." + std::to_string(apiMinor) + "; Filename: " + relFilename + "; Name: " + fullname);
     }
@@ -1418,7 +1469,15 @@ VSPlugin::~VSPlugin() {
         FreeLibrary(libHandle);
 #else
     if (libHandle)
+#ifdef __WINE__
+        if ((uintptr_t)libHandle & 0x1) {
+            FreeLibrary((HMODULE)((uintptr_t)libHandle | ~0x1ULL));
+        } else {
+            dlclose(libHandle);
+        }
+#else // __WINE__
         dlclose(libHandle);
+#endif // __WINE__
 #endif
 }
 
