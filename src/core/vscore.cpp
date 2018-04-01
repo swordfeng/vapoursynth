@@ -1378,7 +1378,7 @@ VSPlugin::VSPlugin(const std::string &relFilename, const std::string &forcedName
         std::wstring wPath = utf16_from_utf8(relFilename);
 
         HMODULE handle = LoadLibraryExW(wPath.c_str(), nullptr, altSearchPath ? 0 : (LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR));
-        libHandle = (void *)((uintptr_t)handle | 0x1ULL);
+        libHandle = (void *)SET_WINE_FLAG(handle);
 
         if (!handle) {
             DWORD lastError = GetLastError();
@@ -1449,8 +1449,8 @@ VSPlugin::VSPlugin(const std::string &relFilename, const std::string &forcedName
         FreeLibrary(libHandle);
 #else
 #ifdef __WINE__
-        if ((uintptr_t)libHandle & 0x1) {
-            FreeLibrary((HMODULE)((uintptr_t)libHandle | ~0x1ULL));
+        if (TEST_WINE_FLAG(libHandle)) {
+            FreeLibrary((HMODULE)CLEAR_WINE_FLAG(libHandle));
         } else {
             dlclose(libHandle);
         }
@@ -1469,8 +1469,8 @@ VSPlugin::~VSPlugin() {
 #else
     if (libHandle)
 #ifdef __WINE__
-        if ((uintptr_t)libHandle & 0x1) {
-            FreeLibrary((HMODULE)((uintptr_t)libHandle | ~0x1ULL));
+        if (TEST_WINE_FLAG(libHandle)) {
+            FreeLibrary((HMODULE)CLEAR_WINE_FLAG(libHandle);
         } else {
             dlclose(libHandle);
         }
@@ -1594,7 +1594,11 @@ VSMap VSPlugin::invoke(const std::string &funcName, const VSMap &args) {
                     s += ", " + *iter;
                 throw VSException(funcName + ": no argument(s) named " + s);
             }
-
+#ifdef __WINE__
+            if (TEST_WINE_FLAG(f.func)) {
+                ((VSPublicFunctionWine)CLEAR_WINE_FLAG(f.func))(&args, &v, f.functionData, core, getVSAPIWine(apiMajor))
+            } else
+#endif
             f.func(&args, &v, f.functionData, core, getVSAPIInternal(apiMajor));
 
             if (!compat && hasCompatNodes(v))
