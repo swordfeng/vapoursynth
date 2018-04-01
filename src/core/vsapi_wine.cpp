@@ -18,8 +18,7 @@
 * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 */
 
-//#ifdef __WINE__
-//#define VS_WINE_CC_OVERRIDE
+#ifdef __WINE__
 
 #include "vscore.h"
 #include "cpufeatures.h"
@@ -648,4 +647,4 @@ const VSAPIWINE *getVSAPIWine(int apiMajor) {
     }
 }
 
-//#endif // __WINE__
+#endif // __WINE__

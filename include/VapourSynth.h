@@ -50,11 +50,7 @@
 #            define VS_WINE_CC __attribute__((ms_abi))
 #        endif
 #    endif
-#    ifndef VS_WINE_CC_OVERRIDE
-#        define VS_CC
-#    else
-#        define VS_CC VS_WINE_CC
-#    endif
+#    define VS_CC
 #endif
 
 /* And now for some symbol hide-and-seek... */
