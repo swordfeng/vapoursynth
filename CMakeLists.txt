@@ -6,6 +6,8 @@ enable_language(ASM_NASM)
 find_package(PkgConfig)
 pkg_check_modules(ZIMG zimg)
 
+find_package( PythonLibs 3 REQUIRED )
+
 add_definitions(-DNDEBUG)
 add_definitions(-DVS_TARGET_OS_LINUX)
 add_definitions(-DVS_TARGET_CPU_X86)
@@ -58,4 +60,7 @@ set_target_properties (vapoursynth PROPERTIES LINK_FLAGS "-no-undefined -avoid-v
 target_link_libraries (vapoursynth zimg dl pthread)
 
 add_executable (vspipe src/vspipe/vspipe.cpp)
+if (PYTHONLIBS_FOUND)
+    target_compile_definitions (vspipe PRIVATE PYTHON_SO=\"${PYTHON_LIBRARY}\")
+endif (PYTHONLIBS_FOUND)
 target_link_libraries (vspipe zimg dl pthread vapoursynth-script)
