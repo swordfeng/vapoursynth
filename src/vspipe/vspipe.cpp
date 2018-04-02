@@ -484,8 +484,10 @@ int main(int argc, char **argv) {
     bool showHelp = false;
     std::map<std::string, std::string> scriptArgs;
 
+#ifdef __WINE__
     // load global python
-    dlopen(PYTHON_SO, RTLD_LAZY | RTLD_GLOBAL);
+    dlopen(PYTHON_SONAME, RTLD_LAZY | RTLD_GLOBAL);
+#endif
 
     for (int arg = 1; arg < argc; arg++) {
         nstring argString = argv[arg];
