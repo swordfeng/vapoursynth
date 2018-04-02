@@ -1247,12 +1247,26 @@ VSCore::VSCore(int threads) : coreFreed(false), numFilterInstances(1), numFuncti
             if (!loadAllPluginsInPath(userPluginDir, filter)) {
                 vsWarning("Autoloading the user plugin dir '%s' failed. Directory doesn't exist?", userPluginDir.c_str());
             }
+#ifdef __WINE__
+            if (isWineLoaded()) {
+                if (!loadAllPluginsInPath(userPluginDir, ".dll")) {
+                    vsWarning("(Wine) Autoloading the user plugin dir '%s' failed. Directory doesn't exist?", userPluginDir.c_str());
+                }
+            }
+#endif // __WINE__
         }
 
         if (autoloadSystemPluginDir) {
             if (!loadAllPluginsInPath(systemPluginDir, filter)) {
                 vsCritical("Autoloading the system plugin dir '%s' failed. Directory doesn't exist?", systemPluginDir.c_str());
             }
+#ifdef __WINE__
+            if (isWineLoaded()) {
+                if (!loadAllPluginsInPath(systemPluginDir, ".dll")) {
+                    vsWarning("(Wine) Autoloading the system DLL plugin dir '%s' failed. Directory doesn't exist?", systemPluginDir.c_str());
+                }
+            }
+#endif // __WINE__
         }
     }
 
@@ -1399,7 +1413,7 @@ VSPlugin::VSPlugin(const std::string &relFilename, const std::string &forcedName
     std::string ext;
     if (len > 4) ext = relFilename.substr(len - 4, len);
     std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
-    if (ext == ".dll") {
+    if (isWineLoaded() && ext == ".dll") {
         // handle path just like linux
         std::vector<char> fullPathBuffer(PATH_MAX + 1);
         if (realpath(relFilename.c_str(), fullPathBuffer.data()))
@@ -1674,3 +1688,27 @@ int VSFrame::alignment = alignmentHelper();
 #else
 int VSFrame::alignment = 32;
 #endif
+
+#ifdef __WINE__
+#include <link.h>
+bool isWineLoaded() {
+    static int loaded = -1;
+    if (loaded == -1) {
+        dl_iterate_phdr([](struct dl_phdr_info *info, size_t size, void *data) {
+            if (!info->dlpi_addr) {
+                size_t len = strlen(info->dlpi_name);
+                const char *compstr = "/ntdll.dll.so";
+                if (len <= strlen(compstr)) return 0;
+                const char *substr = info->dlpi_name + len - strlen(compstr);
+                if (strcmp(substr, compstr) == 0) {
+                    loaded = 1;
+                    return 1;
+                }
+            }
+            return 0;
+        }, nullptr);
+        if (loaded != 1) loaded = 0;
+    }
+    return loaded == 1;
+}
+#endif // __WINE__
