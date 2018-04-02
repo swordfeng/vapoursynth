@@ -82,6 +82,8 @@ const VSAPI *getVSAPIInternal(int apiMajor);
 #ifdef __WINE__
 extern const VSAPIWINE vs_wine_vsapi;
 const VSAPIWINE *getVSAPIWine(int apiMajor);
+
+bool isWineLoaded();
 #endif
 
 class VSException : public std::runtime_error {
