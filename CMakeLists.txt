@@ -43,12 +43,16 @@ include_directories (PUBLIC include)
 
 ExternalProject_Add (vapoursynth_libs
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
-    CONFIGURE_COMMAND autoreconf -fiv <SOURCE_DIR> && <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --disable-static --disable-vspipe --with-plugindir=${VS_PLUGINDIR}
-    BUILD_COMMAND make
-    INSTALL_COMMAND make install)
+    CONFIGURE_COMMAND autoreconf -fiv <SOURCE_DIR> && <SOURCE_DIR>/configure --prefix=${CMAKE_INSTALL_DIR} --libdir=${CMAKE_INSTALL_FULL_LIBDIR} --includedir=${CMAKE_INSTALL_FULL_INCLUDEDIR} --disable-static --disable-vspipe --with-plugindir=${VS_PLUGINDIR}
+    BUILD_COMMAND $(MAKE)
+    INSTALL_COMMAND $(MAKE) install DESTDIR=<INSTALL_DIR>)
 ExternalProject_Get_Property (vapoursynth_libs INSTALL_DIR)
-link_directories (${INSTALL_DIR}/lib)
 set (vapoursynth_libs_INSTALL_DIR ${INSTALL_DIR})
+set (vapoursynth_libs_INCLUDEDIR ${INSTALL_DIR}/${CMAKE_INSTALL_FULL_INCLUDEDIR})
+set (vapoursynth_libs_LIBDIR ${INSTALL_DIR}/${CMAKE_INSTALL_FULL_LIBDIR})
+link_directories (${vapoursynth_libs_LIBDIR})
+
+set (CMAKE_SKIP_BUILD_RPATH TRUE)
 
 add_library (vapoursynth SHARED
     src/core/boxblurfilter.cpp
@@ -94,11 +98,13 @@ endif (PYTHONLIBS_FOUND)
 target_link_libraries (vspipe dl pthread vapoursynth-script ${ZIMG_LIBRARIES} ${PYTHON_LIBRARIES})
 add_dependencies (vspipe vapoursynth_libs)
 
-install (DIRECTORY ${vapoursynth_libs_INSTALL_DIR}/lib/ DESTINATION ${CMAKE_INSTALL_LIBDIR} USE_SOURCE_PERMISSIONS
+install (DIRECTORY ${vapoursynth_libs_LIBDIR}/ DESTINATION ${CMAKE_INSTALL_LIBDIR} USE_SOURCE_PERMISSIONS
     PATTERN "libvapoursynth.so" EXCLUDE
     PATTERN "vapoursynth" EXCLUDE
     PATTERN "*.la" EXCLUDE)
-install (DIRECTORY ${vapoursynth_libs_INSTALL_DIR}/lib/vapoursynth/ DESTINATION ${VS_PLUGINDIR} USE_SOURCE_PERMISSIONS)
+install (DIRECTORY ${vapoursynth_libs_LIBDIR}/vapoursynth/ DESTINATION ${VS_PLUGINDIR} USE_SOURCE_PERMISSIONS)
+install (DIRECTORY ${vapoursynth_libs_INSTALL_DIR}/lib/ DESTINATION ${CMAKE_INSTALL_LIBDIR} USE_SOURCE_PERMISSIONS)
+install (DIRECTORY ${vapoursynth_libs_INCLUDEDIR}/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} USE_SOURCE_PERMISSIONS)
 install (PROGRAMS ${CMAKE_BINARY_DIR}/libvapoursynth.dll.so DESTINATION ${CMAKE_INSTALL_LIBDIR} RENAME libvapoursynth.so)
 install (PROGRAMS ${CMAKE_BINARY_DIR}/vspipe.exe.so DESTINATION ${CMAKE_INSTALL_BINDIR})
 install (PROGRAMS ${CMAKE_BINARY_DIR}/vspipe.exe DESTINATION ${CMAKE_INSTALL_BINDIR} RENAME vspipe)
