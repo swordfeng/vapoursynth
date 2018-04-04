@@ -1575,7 +1575,7 @@ VSPlugin::VSPlugin(const std::string &relFilename, const std::string &forcedName
         else
             filename = relFilename;
         // load library just like windows
-        std::wstring wPath = utf16_from_utf8(relFilename);
+        std::wstring wPath = utf16_from_utf8(filename);
 
         HMODULE handle = LoadLibraryExW(wPath.c_str(), nullptr, altSearchPath ? 0 : (LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR));
         libHandle = (void *)SET_WINE_FLAG(handle);
