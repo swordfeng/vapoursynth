@@ -7,7 +7,7 @@ include (ExternalProject)
 find_package (PkgConfig)
 pkg_check_modules (ZIMG REQUIRED zimg)
 
-find_package (PythonLibs 3.6 REQUIRED)
+find_package (PythonLibs 3.7 REQUIRED)
 
 find_program(WINECC winegcc)
 if (WINECC STREQUAL "WINECC-NOTFOUND")
